@@ -20,15 +20,12 @@ Skill 不以最低 p 值自動選模型。群集資料先確認個體／群組�
 |---|---|
 | `slides.html` | 上台展示的捲動網頁；圖片已內嵌，可單獨複製使用 |
 | `slides.md` | 正式報告的可編輯文字來源 |
-| `講者備註.html` | 僅本機備註，不包含在分享 ZIP |
-| `報告講稿.md` | 僅本機講稿，不包含在分享 ZIP |
 | `cluster-survival-r/` | Skill 本體 |
 | `cluster-survival-r.zip` | 只包含 Skill 的壓縮檔，第一層為同名資料夾 |
 | `demo-results/` | 實際示範輸出、CSV、圖與版本紀錄 |
 | `figures/` | 報告流程圖 |
-| `報告與示範完整包.zip` | 報告、Skill、README 與示範結果的整包備份；不內含其他 ZIP |
+| `cluster-survival-r-project.zip` | 專案資料：slides、Skill、分析報告、README 與示範結果 |
 
-講者備註使用相對路徑讀取圖片，請保留旁邊的 `figures/` 與 `demo-results/`；正式報告 HTML 則已內嵌圖片。
 
 ## Skill 資料夾結構
 
@@ -157,12 +154,13 @@ README 整理日期：2026-10-20。
 
 ## 新增互動與報告功能
 群集資料與重複測量會先辨認層級；不知道選個別差異或整體平均時，可直接描述用途，AI 會用例子與可行性協助。混合效應先分線性／廣義線性（LMM、GLMM）與非線性（NLMM）。
-分析完成後可選擇生成 QMD／HTML；規則在 references/report-export.md，範本在 assets/analysis-report.qmd。需 Quarto 與 R/knitr，QMD 寫好不代表已渲染成功。原分析數據與設定應可由程式重現，不擅自打包敏感資料。
+分析完成後可選擇生成 QMD／HTML；規則在 references/report-export.md，範本在 assets/analysis-report.qmd。需 Quarto 與 R/knitr，QMD 需執行並成功轉成 HTML。原分析數據與設定應可由程式重現，不擅自打包敏感資料。
 
 ## 完整分析報告示範
-`analysis-report.qmd` 與 `analysis-report.html` 為已填入內容的 Cox 示範，R 程式碼與結果直接並列顯示。Skill 內 assets/analysis-report.qmd 仍是供後續分析替換內容的通用範本。HTML 由 Quarto 實際執行 R 後渲染，不是只有空白架構。
+`analysis-report.qmd` 與 `analysis-report.html` 為已填入內容的 Cox 示範，R 程式碼與結果直接並列顯示。Skill 內 assets/analysis-report.qmd 仍是供後續分析替換內容的通用範本。HTML 由 Quarto 實際執行 R 後產生，不是只有空白架構。
 
-新增完整報告：analysis-report.qmd/html（Cox）、gee-analysis-report.qmd/html（GEE）、mixed-effects-analysis-report.qmd/html（混合效應，以 LMM 示範）。均顯示 R 程式碼、診斷判讀與結論。完整 ZIP 不包含講者備註、報告講稿或舊報告入口。
 
 ## 選模範圍與群集角色
 一般多元 logistic 不是 GLMM。本 Skill 不自行改跑三類之外的主分析；發現不適用時說明並停止。有醫院、班級、抽樣群或重複測量線索時，主動確認群內相關與群集角色；不需要使用者先說出模型名稱。「比較群集」不代表固定效果授權。完整規則見 references/cluster-roles.md。
+
+分析範例已加入頂部重點摘要與明確選模理由。Cox另含KM／At-risk table、HR森林圖與表觀C-index；GEE另含robust CI邊際預測；LMM呈現模型式、友善變異組成表與按天數的VPC。方法選擇與指標限制見 references/report-visuals.md。

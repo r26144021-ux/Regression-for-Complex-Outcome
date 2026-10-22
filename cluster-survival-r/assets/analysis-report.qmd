@@ -1,0 +1,259 @@
+---
+title: "Cox 迴歸分析報告"
+subtitle: "性別與肺癌病人死亡事件時間的關聯｜完整 R 程式碼與結果"
+lang: zh-TW
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: false
+    code-tools: true
+    theme: default
+    highlight-style: github
+execute:
+  echo: true
+  warning: true
+  error: false
+---
+
+## 重點摘要（Executive Summary）
+
+```{r}
+#| label: executive-summary-setup
+#| include: false
+summary_data <- survival::lung
+summary_data$event <- as.integer(summary_data$status == 2)
+summary_data$sex <- factor(summary_data$sex, levels=c(1,2), labels=c("男性","女性"))
+summary_fit <- survival::coxph(survival::Surv(time,event)~sex,
+                              data=summary_data,ties="efron",x=TRUE,y=TRUE)
+summary_sm <- summary(summary_fit)
+summary_hr <- summary_sm$conf.int[1,]
+summary_ph <- survival::cox.zph(summary_fit)$table["GLOBAL","p"]
+summary_c <- survival::concordance(summary_fit)$concordance
+```
+
+- **資料與選模：**`r nrow(summary_data)` 位病人、`r sum(summary_data$event)` 個死亡事件；有追蹤時間與右設限，採 Cox。
+- **主要結果：**女性相對男性 HR＝`r sprintf("%.3f",summary_hr["exp(coef)"])`，95% CI `r sprintf("%.3f–%.3f",summary_hr["lower .95"],summary_hr["upper .95"])`。
+- **診斷：**Schoenfeld 檢定 p＝`r sprintf("%.3f",summary_ph)`，可暫作初步分析；圖中時間趨勢列為後續確認方向。
+- **區辨能力：**原資料 Harrell C＝`r sprintf("%.3f",summary_c)`；此為未經驗證的表觀區辨能力，不是個人預測準確率。
+
+
+## 研究目的
+
+以 `survival::lung` 示範，研究女性相對男性的死亡事件率是否不同。本報告先使用只含性別的 Cox 比例風險模型，未調整年齡等其他變數；結果解釋為關聯。
+
+## 資料與變數介紹
+
+資料為 NCCTG 肺癌資料，每列是一位病人的追蹤紀錄。時間單位為天，原始事件編碼及性別編碼先依資料字典確認，再轉換。
+
+```{r}
+# 載入套件與內建資料；若缺套件，先 install.packages("survival")。
+library(survival)
+raw_data <- survival::lung
+
+variable_info <- data.frame(
+  變數 = c("time", "status", "sex", "event"),
+  角色 = c("追蹤時間", "原始狀態", "主要解釋變數", "建模事件欄"),
+  說明 = c("天", "1=設限、2=死亡", "1=男性、2=女性", "0=設限、1=死亡")
+)
+knitr::kable(variable_info, caption = "本次分析使用的變數")
+```
+
+### 前處理與缺失檢查
+
+保留原始資料，另建立事件欄與性別因子。只檢查本次模型使用的欄位，不因其他未使用欄位缺失而排除病人。
+
+```{r}
+stopifnot(all(na.omit(raw_data$status) %in% c(1, 2)))
+stopifnot(all(na.omit(raw_data$sex) %in% c(1, 2)))
+d <- raw_data
+d$event <- as.integer(d$status == 2)
+d$sex <- factor(d$sex, levels = c(1, 2), labels = c("男性", "女性"))
+
+missing <- colSums(is.na(d[c("time", "event", "sex")]))
+knitr::kable(data.frame(欄位 = names(missing), 缺失數 = unname(missing)))
+# 此範例的分析欄位應完整；若換自備資料有缺失，先決定處理策略。
+stopifnot(!anyNA(d[c("time", "event", "sex")]))
+stopifnot(all(d$event %in% c(0, 1)), all(d$time > 0))
+knitr::kable(data.frame(
+  原始列數 = nrow(raw_data), 分析列數 = nrow(d),
+  死亡事件數 = sum(d$event), 設限數 = sum(d$event == 0)
+))
+```
+
+## 模型選擇與設定
+
+**為什麼使用 Cox？**本研究關心的是死亡多久發生，而且部分病人追蹤結束時仍未發生事件；Cox 能保留時間與右設限資訊。只分析死亡與否會忽略追蹤時間，直接對天數做一般迴歸也不適合這些設限紀錄。男性為參考組，使用 Efron 處理同時發生的事件，提供 95% Wald 信賴區間。
+
+<div style="font-family:'Cambria Math',serif;font-size:1.25em;padding:1em;background:#f0f5f4;border-radius:8px;overflow:auto;" role="math">
+h(t ∣ sex) = h<sub>0</sub>(t) exp{β I(sex = 女性)}
+</div>
+
+```{r}
+fit <- coxph(Surv(time, event) ~ sex, data = d,
+             ties = "efron", x = TRUE, y = TRUE, na.action = na.fail)
+summary(fit)
+```
+
+## 分析結果與檢定
+
+性別係數的 Wald 檢定檢查係數是否為 0，等價於女性相對男性的 HR 是否為 1。這項檢定與後面的比例風險假設檢定，回答不同問題。
+
+```{r}
+sm <- summary(fit)
+beta <- unname(coef(fit)[1])
+se <- sqrt(vcov(fit)[1, 1])
+z <- beta / se
+p_effect <- 2 * pnorm(-abs(z))
+result <- data.frame(
+  比較 = "女性相對男性", HR = exp(beta),
+  CI下限 = exp(beta - qnorm(.975) * se),
+  CI上限 = exp(beta + qnorm(.975) * se),
+  Wald_Z = z, p值 = p_effect
+)
+knitr::kable(result, digits = 4, caption = "性別的 HR、95% CI 與 Wald 檢定")
+```
+
+女性相對男性的 HR 為 **`r sprintf("%.3f", result$HR)`**，95% CI 為
+**`r sprintf("%.3f", result$CI下限)`–`r sprintf("%.3f", result$CI上限)`**，
+Wald p＝**`r sprintf("%.5f", p_effect)`**。本資料中，女性與較低死亡瞬時事件率有關；HR 不是死亡機率比，也不表示存活時間直接增加相同比例。
+
+### 未調整的 Kaplan–Meier 曲線與風險人數
+
+KM 依性別直接估計存活曲線，不依賴 Cox 的 PH 假設；下方 At-risk table 是各時間點前仍在追蹤、尚未死亡的人數。這是同一示範的描述性補充，不另行選擇其他主模型。
+
+```{r}
+#| fig-width: 9
+#| fig-height: 7
+#| fig-cap: "按性別分組的 KM 存活曲線與 At-risk table"
+km <- survfit(Surv(time,event)~sex,data=d)
+risk_times <- c(0,200,400,600,800)
+risk_matrix <- sapply(risk_times,function(t)
+  vapply(levels(d$sex),function(g) sum(d$sex==g & d$time>=t),integer(1)))
+rownames(risk_matrix) <- c("Male","Female")
+colnames(risk_matrix) <- risk_times
+layout(matrix(1:2,ncol=1),heights=c(4,1.4))
+par(mar=c(1,5,2,2))
+plot(km,col=c("#176b87","#da8b38"),lwd=2,mark.time=TRUE,
+     xlim=c(0,max(d$time)),xlab="",ylab="Survival probability",xaxt="n")
+legend("topright",legend=c("Male","Female"),col=c("#176b87","#da8b38"),lwd=2,bty="n")
+par(mar=c(4,5,1,2))
+plot(NA,xlim=c(0,max(d$time)),ylim=c(.5,2.8),xlab="Days",ylab="",yaxt="n",xaxt="n",bty="n")
+axis(1,at=risk_times);axis(2,at=c(2,1),labels=c("Male","Female"),las=1,tick=FALSE)
+text(0,2.65,"Number at risk",adj=0)
+for(i in 1:2) text(risk_times,3-i,risk_matrix[i,])
+layout(1)
+```
+
+女性的 KM 曲線多數追蹤時間高於男性，與較低事件率的模型方向一致。後段在風險人數減少，尤其接近追蹤末端時曲線較不穩定，解讀時應一併看人數。
+
+```{r}
+km_summary <- summary(km,times=c(200,400,600,800),data.frame=TRUE)
+km_table <- data.frame(性別=sub("sex=","",km_summary$strata),天數=km_summary$time,
+  在風險人數=km_summary$n.risk,存活機率=km_summary$surv,
+  CI下限=km_summary$lower,CI上限=km_summary$upper)
+knitr::kable(km_table,digits=3,caption="指定時間點的 KM 存活估計與95% CI")
+stopifnot(all(risk_matrix[,1]==as.integer(table(d$sex))))
+```
+
+### HR 森林圖
+
+```{r}
+#| fig-width: 8
+#| fig-height: 3
+#| fig-cap: "女性相對男性的 HR 與95% Wald CI（對數刻度）"
+par(mar=c(4,8,2,2))
+plot(result$HR,1,log="x",xlim=range(c(result$CI下限,result$CI上限,1)) * c(.85,1.1),
+     ylim=c(.5,1.5),yaxt="n",ylab="",xlab="Hazard ratio (log scale)",pch=18,cex=1.5)
+segments(result$CI下限,1,result$CI上限,1,lwd=2,col="#176b87")
+abline(v=1,lty=2,col="gray50")
+axis(2,at=1,labels="Female vs Male",las=1)
+```
+
+點估計與區間位於 HR＝1 左側，表示女性相對男性的事件率較低。本例只有一個效果，森林圖主要作視覺示範，不會為了增加圖上的項目而更動模型。
+
+### C-index：區辨能力
+
+```{r}
+con <- concordance(fit)
+c_index <- unname(con$concordance)
+c_se <- sqrt(unname(con$var))
+knitr::kable(data.frame(Harrell_C=c_index,SE=c_se,
+  CI下限=max(0,c_index-qnorm(.975)*c_se),CI上限=min(1,c_index+qnorm(.975)*c_se)),
+  digits=3,caption="原分析資料的表觀 C-index 與近似95% CI")
+```
+
+本例 C-index＝**`r sprintf("%.3f",c_index)`**，表示在可比較的病人配對中，模型對較早發生事件者的風險排序能力有限；只有性別這個二元預測變數，會產生許多相同風險分數。本指標衡量排序區辨，不衡量預測機率校準，也不是「正確預測病人」的百分比。此處使用配適的同一資料，屬表觀表現；若目標是預測，還需依規劃做內部／外部驗證。本報告未執行這些驗證。
+
+### 模型估計的存活曲線
+
+```{r}
+#| fig-cap: "只含性別之 Cox 模型估計存活曲線"
+#| fig-width: 8
+#| fig-height: 5
+new_d <- data.frame(sex = factor(c("男性", "女性"), levels = levels(d$sex)))
+curves <- survfit(fit, newdata = new_d)
+plot(curves, col = c("#176b87", "#da8b38"), lwd = 2,
+     xlab = "Days", ylab = "Estimated survival probability")
+legend("topright", legend = c("Male", "Female"),
+       col = c("#176b87", "#da8b38"), lwd = 2, bty = "n")
+```
+
+## 模型診斷：Schoenfeld 殘差
+
+用 `cox.zph()` 進行比例風險假設檢查：檢定是否有證據顯示效果隨時間改變。
+
+```{r}
+ph <- cox.zph(fit)
+knitr::kable(as.data.frame(ph$table), digits = 4,
+             caption = "Schoenfeld 殘差的比例風險假設檢定")
+p_ph <- unname(ph$table["GLOBAL", "p"])
+```
+
+全域檢定 p＝**`r sprintf("%.3f", p_ph)`**。以 0.05 為顯著水準，未發現顯著違反比例風險假設的證據。
+
+```{r}
+#| fig-cap: "縮放 Schoenfeld 殘差診斷圖：估計性別效果隨時間的變化"
+#| fig-width: 8
+#| fig-height: 5
+plot(ph)
+```
+
+**圖形判讀：**性別效果的平滑曲線由早期較負的值逐漸上升，後段接近 0，提示女性較低事件率的關聯可能隨時間減弱。追蹤後段的不確定帶較寬，末端估計需較審慎判讀。
+
+**合併判讀：**Schoenfeld 殘差檢定 p＝`r sprintf("%.3f", p_ph)`，未達 0.05，可暫以此 Cox 模型進行分析。圖中的上升趨勢值得進一步確認；若要更完整評估固定 HR 的適切性，可依研究規劃加入時間變動效果作敏感度分析。本例尚未執行這項延伸。
+
+## 結論與限制
+
+本例共分析 **`r nrow(d)`** 位病人、**`r sum(d$event)`** 個死亡事件。
+女性相對男性的死亡 HR 小於 1，Wald 檢定顯示性別與事件率有統計關聯。
+比例風險檢定 p＝`r sprintf("%.3f", p_ph)`，未發現顯著違反 PH 的證據，可暫以此模型作初步分析。Schoenfeld 圖顯示性別效果隨時間上升、後段不確定性較大；進一步可評估時間變動效果，確認固定 HR 摘要是否合適。
+
+本例未調整其他共變數，結論限於關聯；設限機制的合理性需結合研究設計與追蹤情形評估。
+
+## 來源與執行環境
+
+- 資料與編碼：[survival::lung 文件](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/lung.html)
+- PH 診斷：[cox.zph 文件](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/cox.zph.html)
+- 方法另參考先前課堂教材。
+
+```{r}
+sessionInfo()
+```
+
+## 摘要計算程式
+
+摘要與下方主分析採同一資料與設定；以下保留產生摘要數值的程式。
+
+```{r}
+#| eval: false
+summary_data <- survival::lung
+summary_data$event <- as.integer(summary_data$status == 2)
+summary_data$sex <- factor(summary_data$sex, levels=c(1,2), labels=c("男性","女性"))
+summary_fit <- survival::coxph(survival::Surv(time,event)~sex,
+                              data=summary_data,ties="efron",x=TRUE,y=TRUE)
+summary_sm <- summary(summary_fit)
+summary_hr <- summary_sm$conf.int[1,]
+summary_ph <- survival::cox.zph(summary_fit)$table["GLOBAL","p"]
+summary_c <- survival::concordance(summary_fit)$concordance
+```

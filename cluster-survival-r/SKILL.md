@@ -111,3 +111,5 @@ LMM 只有 QQ 圖時稱「常態性圖形檢查」，不寫「常態性檢定通
 
 ## 報告摘要與圖表
 匯出報告先讀 references/report-visuals.md。頂部提供精簡、由實際R結果產生的重點摘要；說明模型與資料結構、尺度及研究目標的連結。依適用性補 Cox KM／At-risk、HR森林圖及區辨指標；GEE邊際預測圖；LMM數學式、變異組成與適用ICC／VPC。C-index不稱為證明預測效能，隨機斜率不套單一截距ICC當全模型指標。表格中的結構性NA說明或改友善排版，真正估計失敗需追查。
+
+報告中文輸出：依 references/report-export.md 在每份 QMD 的首個 R chunk 確認 UTF-8 語系並檢查中文輸出；完成 HTML 後檢查表格與圖中文字，出現 `<U+…>` 等異常先修正再交付。不能僅靠來源檔 UTF-8 或作業系統 code page 判定正常。

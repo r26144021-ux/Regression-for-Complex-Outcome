@@ -35,6 +35,9 @@ Skill 不以最低 p 值自動選模型。群集資料先確認個體／群組�
 |---|---|
 | `slides.html` | 上台展示的捲動網頁；圖片已內嵌，可單獨複製使用 |
 | `slides.md` | 正式報告的可編輯文字來源 |
+| `analysis-report.qmd`／`.html` | Cox 示範：資料探索、KM、估計、診斷與程式 |
+| `mixed-effects-analysis-report.qmd`／`.html` | LMM 示範：完整 Days 0–9、個體軌跡、估計與診斷 |
+| `gee-analysis-report.qmd`／`.html` | GEE 示範：分組觀察比例、邊際預測、估計與診斷 |
 | `cluster-survival-r/` | Skill 本體 |
 | `cluster-survival-r.zip` | 只包含 Skill 的壓縮檔，第一層為同名資料夾 |
 | `demo-results/` | 實際示範輸出、CSV、圖與版本紀錄 |
